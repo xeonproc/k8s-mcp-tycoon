@@ -342,7 +342,9 @@ export function buildWorld(scene) {
     label.position.set(node.x, top + 3.2, node.z);
     root.add(label);
 
-    nodeObjects[id] = { group: g, label, node, anchorY: node.y + 3 };
+    // Packets fly at anchorY. Derived from the building's true bounding box so a
+    // tall structure (the keep's towers reach y=17) cannot swallow the packet.
+    nodeObjects[id] = { group: g, label, node, anchorY: top + 2 };
   });
 
   // The NetworkPolicy boundary used to be drawn here as loose scenery. It is now

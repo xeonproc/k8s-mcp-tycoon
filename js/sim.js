@@ -39,8 +39,9 @@ function makeRing(color) {
 }
 
 export class Sim {
-  constructor(scene) {
+  constructor(scene, nodeObjects = {}) {
     this.scene = scene;
+    this.nodeObjects = nodeObjects;
     this.flowId = FLOWS[0].id;
     this.stepIndex = 0;
     this.t = 0;
@@ -138,7 +139,9 @@ export class Sim {
 
   _anchor(id) {
     const n = NODES[id];
-    return new THREE.Vector3(n.x, n.y + 6.5, n.z);
+    const a = this.nodeObjects[id];
+    // Above the actual roofline, not a fixed offset from the node's base.
+    return new THREE.Vector3(n.x, a ? a.anchorY : n.y + 6.5, n.z);
   }
 
   update(dt) {
@@ -188,7 +191,7 @@ export class Sim {
       const ang = ease * Math.PI * 2;
       pos = new THREE.Vector3(
         n.x + Math.cos(ang) * 4.5,
-        n.y + 8.5 + Math.sin(ang * 2) * 1.2,
+        a.y + 1.5 + Math.sin(ang * 2) * 1.2,
         n.z + Math.sin(ang) * 4.5
       );
     } else {
@@ -225,7 +228,7 @@ export class Sim {
         const ang = e2 * Math.PI * 2;
         tp = new THREE.Vector3(
           n.x + Math.cos(ang) * 4.5,
-          n.y + 8.5 + Math.sin(ang * 2) * 1.2,
+          a.y + 1.5 + Math.sin(ang * 2) * 1.2,
           n.z + Math.sin(ang) * 4.5
         );
       } else {
