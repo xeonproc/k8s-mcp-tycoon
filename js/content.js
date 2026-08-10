@@ -47,7 +47,10 @@ export const NODES = {
   etcd:      { x:   6, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'etcd',                sub: 'All state' },
   scheduler: { x: -22, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'kube-scheduler',      sub: 'Placement' },
   ctrlmgr:   { x: -34, z: -32, y: 6, zone: 'control', kind: 'tower',   label: 'controller-manager',  sub: 'Reconcile' },
-  kubelet:   { x:   8, z: -22, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
+  // Deliberately OFF the plateau, at the foot of the ramp: the kubelet is the one
+  // "control plane" component that runs on worker nodes, not on the control plane.
+  // (It also has to sit here — the hill is solid, so y:0 inside its footprint buries it.)
+  kubelet:   { x:   8, z: -11, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
 };
 
 /* ------------------------------------------------------------------ *
@@ -305,10 +308,16 @@ export const FLOWS = [
         practice: 'The server MUST re-validate that headers match the body. Trusting the gateway\'s view alone is how policy gets bypassed.',
       },
       {
-        from: 'mcpGithub', to: 'egress', packet: 'secret', zone: 'mcp',
+        from: 'mcpGithub', to: 'vault', packet: 'secret', zone: 'vault',
         title: 'Token EXCHANGE, not passthrough',
-        body: 'The server validated that the inbound token\'s audience names itself. It now obtains its OWN downstream credential. It does not forward the agent\'s token — the spec forbids that outright.',
+        body: 'The server validated that the inbound token\'s audience names itself. It now fetches its OWN downstream credential from the secrets manager. It does not forward the agent\'s token — the spec forbids that outright.',
         practice: 'Token passthrough breaks rate limiting, destroys the audit trail, and turns the server into an exfiltration proxy. MUST NOT.',
+      },
+      {
+        from: 'vault', to: 'egress', packet: 'secret', zone: 'vault',
+        title: 'A short-lived credential, not a static secret',
+        body: 'The credential comes from an external manager (External Secrets Operator or the CSI Secret Store driver), not from committed YAML. It is short-lived and audience-bound, so a copy stolen an hour from now is already useless.',
+        practice: 'Prefer projected ServiceAccount tokens and short-lived credentials over static ones. Rotate, and alert on use from an unexpected identity.',
       },
       {
         from: 'egress', to: 'mcpGithub', packet: 'mcp', zone: 'vault',
