@@ -48,7 +48,7 @@ export const NODES = {
 
   apiserver: { x:  -8, z: -34, y: 6, zone: 'control', kind: 'keep',    label: 'kube-apiserver',      sub: 'The only door' },
   // Sits in FRONT of the keep: nothing becomes real without passing through it.
-  admission: { x:  -8, z: -22, y: 6, zone: 'control', kind: 'gatehouse',label: 'Admission',          sub: 'Last gate' },
+  admission: { x:  -8, z: -26, y: 6, zone: 'control', kind: 'gatehouse',label: 'Admission',          sub: 'Last gate' },
   etcd:      { x:   6, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'etcd',                sub: 'All state' },
   scheduler: { x: -22, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'kube-scheduler',      sub: 'Placement' },
   ctrlmgr:   { x: -34, z: -32, y: 6, zone: 'control', kind: 'tower',   label: 'controller-manager',  sub: 'Reconcile' },
@@ -57,6 +57,13 @@ export const NODES = {
   // (It also has to sit here — the hill is solid, so y:0 inside its footprint buries it.)
   kubelet:   { x:   8, z: -11, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
 };
+
+/* The control-plane plateau is a 6-unit hill wearing a 0.6-unit plaza cap, so a
+ * node standing on it has its walking surface 0.6 ABOVE its own y. Anything drawn
+ * flat on the ground — selection rings, blocked markers — must use this rather
+ * than node.y, or it renders inside the cap and is invisible from above. */
+export const PLATEAU_CAP = 0.6;
+export const surfaceY = (n) => n.y + (n.y > 0 ? PLATEAU_CAP : 0);
 
 /* ------------------------------------------------------------------ *
  * NODE_INFO — per-building teaching content.

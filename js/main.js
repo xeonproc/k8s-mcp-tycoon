@@ -5,7 +5,7 @@
  * This file is the only one that touches the DOM or the browser event loop.
  */
 import * as THREE from '../vendor/three.module.min.js';
-import { NODES, NODE_INFO, ZONES, PACKETS, FLOWS } from './content.js';
+import { NODES, NODE_INFO, ZONES, PACKETS, FLOWS, surfaceY } from './content.js';
 import { buildWorld } from './world.js';
 import { Sim } from './sim.js';
 
@@ -193,7 +193,7 @@ function pick(e) {
 
 function selectNode(id) {
   const n = NODES[id];
-  pickRing.position.set(n.x, n.y + 0.3, n.z);
+  pickRing.position.set(n.x, surfaceY(n) + 0.3, n.z);
   pickRing.visible = true;
 }
 

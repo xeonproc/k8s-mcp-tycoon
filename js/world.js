@@ -5,7 +5,7 @@
  * simple primitives only. RollerCoaster Tycoon by way of a whiteboard.
  */
 import * as THREE from '../vendor/three.module.min.js';
-import { NODES, ZONES } from './content.js';
+import { NODES, ZONES, PLATEAU_CAP } from './content.js';
 
 const flat = (color, opts = {}) =>
   new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
@@ -281,8 +281,8 @@ export function buildWorld(scene) {
   hill.position.set(-12, 3, -34);
   hill.castShadow = true; hill.receiveShadow = true;
   root.add(hill);
-  const hillTop = new THREE.Mesh(new THREE.BoxGeometry(74, 0.6, 30), MAT.plaza);
-  hillTop.position.set(-12, 6.3, -34);
+  const hillTop = new THREE.Mesh(new THREE.BoxGeometry(74, PLATEAU_CAP, 30), MAT.plaza);
+  hillTop.position.set(-12, 6 + PLATEAU_CAP / 2, -34);
   hillTop.receiveShadow = true;
   root.add(hillTop);
   // ramp up to the hill

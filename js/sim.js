@@ -6,7 +6,7 @@
  * the DOM — it emits events and ui.js decides what to render.
  */
 import * as THREE from '../vendor/three.module.min.js';
-import { NODES, PACKETS, FLOW_BY_ID, FLOWS } from './content.js';
+import { NODES, PACKETS, FLOW_BY_ID, FLOWS, surfaceY } from './content.js';
 
 const STEP_SECONDS = 3.2;   // base duration of one step at 1x
 const HOLD_SECONDS = 0.9;   // pause on arrival so the card can be read
@@ -207,7 +207,7 @@ export class Sim {
       const p = performance.now() * 0.012;
       this.packet.position.x += Math.sin(p * 3) * 0.5;
       this.packet.scale.setScalar(0.75 + Math.sin(p) * 0.18);
-      this.ring.position.set(NODES[s.to].x, NODES[s.to].y + 0.25, NODES[s.to].z);
+      this.ring.position.set(NODES[s.to].x, surfaceY(NODES[s.to]) + 0.25, NODES[s.to].z);
       const pulse = 0.55 + Math.abs(Math.sin(p * 0.55)) * 0.45;
       this.ring.material.opacity = pulse;
       this.ring.scale.setScalar(0.9 + pulse * 0.25);
