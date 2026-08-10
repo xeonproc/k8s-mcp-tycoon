@@ -271,7 +271,7 @@ export function buildWorld(scene) {
     const s = 5 + Math.random() * 8;
     const p = new THREE.Mesh(new THREE.PlaneGeometry(s, s), MAT.grassDark);
     p.rotation.x = -Math.PI / 2;
-    p.position.set((Math.random() - 0.5) * 200, 0.02, (Math.random() - 0.5) * 140);
+    p.position.set((Math.random() - 0.5) * 200, 0.02 + Math.random() * 0.015, (Math.random() - 0.5) * 140);
     p.receiveShadow = true;
     root.add(p);
   }
@@ -292,13 +292,18 @@ export function buildWorld(scene) {
   root.add(ramp);
 
   // Zone pads — a tinted platform under each district
+  // Districts must TILE, not overlap. These pads are translucent, so any overlap
+  // stacks the tint and shows up as hard-edged banding on the grass. Extents are
+  // written out so the gutters between them stay obvious when editing:
+  //   gate -61..-35 | routing -31..-15 | agents -13..5 | mcp 7..35
+  //   foundry 37..53 | vault 54..68
   const zoneBounds = {
-    gate:    { x: -48, z: 2,   w: 26, d: 26 },
-    routing: { x: -23, z: 2,   w: 18, d: 24 },
-    agents:  { x: -5,  z: 2,   w: 20, d: 40 },
-    mcp:     { x: 22,  z: 3,   w: 32, d: 44 },
-    foundry: { x: 46,  z: -5,  w: 22, d: 34 },
-    vault:   { x: 60,  z: -4,  w: 18, d: 34 },
+    gate:    { x: -48, z:  2, w: 26, d: 26 },
+    routing: { x: -23, z:  2, w: 16, d: 24 },
+    agents:  { x:  -4, z:  2, w: 18, d: 38 },
+    mcp:     { x:  21, z:  3, w: 28, d: 40 },
+    foundry: { x:  45, z: -5, w: 16, d: 30 },
+    vault:   { x:  61, z: -4, w: 14, d: 34 },
   };
   Object.entries(zoneBounds).forEach(([id, b]) => {
     const pad = new THREE.Mesh(

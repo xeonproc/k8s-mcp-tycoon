@@ -55,7 +55,7 @@ export const NODES = {
   // Deliberately OFF the plateau, at the foot of the ramp: the kubelet is the one
   // "control plane" component that runs on worker nodes, not on the control plane.
   // (It also has to sit here — the hill is solid, so y:0 inside its footprint buries it.)
-  kubelet:   { x:  12, z: -14, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
+  kubelet:   { x:  14, z: -10, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
 };
 
 /* The control-plane plateau is a 6-unit hill wearing a 0.6-unit plaza cap, so a
