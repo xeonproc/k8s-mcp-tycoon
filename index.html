@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>K8s · MCP Tycoon — an interactive architecture simulation</title>
+<meta name="description" content="A low-poly, RollerCoaster-Tycoon-style simulation of Kubernetes architecture, MCP servers, model serving, agent-to-agent flows, and the security best practices at every layer." />
+<link rel="stylesheet" href="./css/styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎢</text></svg>" />
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p>Building the park…</p></div>
+
+<div id="app">
+
+  <!-- ───────────── 3D stage ───────────── -->
+  <div id="stage">
+    <canvas id="scene"></canvas>
+
+    <header id="brand">
+      <h1>K8s · MCP <span>Tycoon</span></h1>
+      <p>Kubernetes · Model Context Protocol · Agents · Security</p>
+    </header>
+
+    <button id="panelToggle" aria-label="Toggle information panel" aria-expanded="true">
+      <span class="bar"></span>
+    </button>
+
+    <nav id="zoneChips" aria-label="Jump to district"></nav>
+
+    <div id="legend">
+      <button id="legendToggle" aria-expanded="false" aria-controls="legendBody">
+        Legend <span class="chev">▾</span>
+      </button>
+      <ul id="legendBody" hidden></ul>
+    </div>
+
+    <div id="hint">Drag to orbit · scroll to zoom · click a building</div>
+  </div>
+
+  <!-- ───────────── info panel ───────────── -->
+  <aside id="panel" aria-live="polite">
+    <div id="panelScroll">
+
+      <section id="flowCard">
+        <div class="rowBetween">
+          <span class="eyebrow" id="flowKind">Flow</span>
+          <span class="stepCount" id="stepCount"></span>
+        </div>
+        <h2 id="stepTitle">Loading…</h2>
+        <p id="stepBody"></p>
+        <div id="practice" class="practice" hidden>
+          <span class="practiceLabel">Best practice</span>
+          <p id="practiceText"></p>
+        </div>
+        <ol id="stepList" aria-label="Steps in this flow"></ol>
+      </section>
+
+      <section id="zoneCard">
+        <span class="eyebrow" id="zoneEyebrow">District</span>
+        <h3 id="zoneName"></h3>
+        <p class="sub" id="zoneSub"></p>
+        <p id="zoneSummary"></p>
+
+        <details id="zoneDetailWrap">
+          <summary>How it works</summary>
+          <ul id="zoneDetail"></ul>
+        </details>
+
+        <details id="zonePracticeWrap" open>
+          <summary>Best practices</summary>
+          <ul id="zonePractices"></ul>
+        </details>
+      </section>
+
+      <footer id="panelFoot">
+        <p>Built with the <a href="https://laurentiugabriel.github.io/blog/articles/how-i-use-llms-to-learn/" target="_blank" rel="noopener">build&nbsp;→&nbsp;verify&nbsp;→&nbsp;simulate</a> learning method.</p>
+        <p>Knowledge base: <a href="./docs/01-kubernetes-architecture.md">K8s</a> ·
+           <a href="./docs/02-mcp-in-kubernetes.md">MCP</a> ·
+           <a href="./docs/03-models-agents-and-a2a.md">Agents</a> ·
+           <a href="./docs/04-security-best-practices.md">Security</a> ·
+           <a href="./docs/VERIFICATION.md">Accuracy report</a></p>
+      </footer>
+
+    </div>
+  </aside>
+
+  <!-- ───────────── controls ───────────── -->
+  <div id="controls">
+    <div class="ctrlGroup ctrlFlow">
+      <label class="srOnly" for="flowSelect">Scenario</label>
+      <select id="flowSelect"></select>
+    </div>
+
+    <div class="ctrlGroup ctrlTransport">
+      <button id="btnBack"  title="Previous step (←)" aria-label="Previous step">⏮</button>
+      <button id="btnPlay"  class="primary" title="Play / pause (space)" aria-label="Play or pause">▶</button>
+      <button id="btnFwd"   title="Next step (→)" aria-label="Next step">⏭</button>
+      <button id="btnReset" title="Restart this scenario (R)" aria-label="Restart">↺</button>
+    </div>
+
+    <div class="ctrlGroup ctrlSpeed">
+      <label for="speed">Speed</label>
+      <input type="range" id="speed" min="0.25" max="3" step="0.25" value="1" />
+      <output id="speedOut">1×</output>
+    </div>
+
+    <div class="ctrlGroup ctrlToggles">
+      <label class="switch" title="Loop the scenario when it finishes">
+        <input type="checkbox" id="loopChk" checked /><span>Loop</span>
+      </label>
+      <label class="switch" title="Follow the action with the camera">
+        <input type="checkbox" id="followChk" checked /><span>Follow</span>
+      </label>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
