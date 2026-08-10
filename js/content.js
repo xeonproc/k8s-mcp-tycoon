@@ -54,6 +54,285 @@ export const NODES = {
 };
 
 /* ------------------------------------------------------------------ *
+ * NODE_INFO — per-building teaching content.
+ *
+ * ZONES teach the district ("how does ingress work"). This teaches the
+ * individual component ("what is kube-scheduler actually responsible
+ * for"). Clicking a building shows this card ABOVE its district card,
+ * so the five buildings on Control Plane Hill no longer all render the
+ * same panel.
+ * ------------------------------------------------------------------ */
+export const NODE_INFO = {
+  internet: {
+    what: 'Everything outside the cluster. The only zone you control nothing about.',
+    detail: [
+      'Not a Kubernetes object — it is drawn as a cloud precisely because it is outside the trust boundary.',
+      'Traffic arriving here has no identity yet. Identity is established at the Gateway, one hop later.',
+    ],
+    practices: [
+      'Assume every inbound request is hostile until authenticated.',
+      'Nothing inside the cluster should ever be directly routable from here — only the Gateway is exposed.',
+    ],
+  },
+
+  gateway: {
+    what: 'The cluster\'s front door. Terminates TLS, authenticates callers, and routes to a Service.',
+    detail: [
+      'Gateway API splits responsibility by role: GatewayClass (the provider), Gateway (platform team — listeners and TLS), HTTPRoute (app teams).',
+      'That split is the point: an app team attaches a route without holding permission to edit TLS configuration.',
+      'Gateway, GatewayClass and HTTPRoute have been GA since Gateway API v1.0. TCPRoute and UDPRoute reached Standard in v1.6.',
+      'Ingress is feature-frozen but still supported and very widely deployed — it is not deprecated.',
+    ],
+    practices: [
+      'Authenticate here with OIDC/JWT rather than separately in every app.',
+      'Rate limit per user AND per tenant — one prompt fans out into many internal calls.',
+      'Cap request body size; prompt payloads are an easy memory-exhaustion vector.',
+      'Idle timeout must exceed your slowest tool call — in MCP and A2A a closed stream means "cancel".',
+    ],
+  },
+
+  svc: {
+    what: 'A stable virtual IP in front of a set of pods that come and go.',
+    detail: [
+      'Pods are mortal and their IPs churn. The Service VIP is the stable identity; EndpointSlices track which pods are actually ready.',
+      'kube-proxy programs iptables/IPVS to load-balance the VIP. A modern CNI such as Cilium in eBPF mode can replace kube-proxy entirely.',
+      'Only pods passing their readiness probe appear in the EndpointSlice.',
+      'Because MCP became stateless in 2026-07-28, plain ClusterIP round-robin is the correct choice for MCP servers — no session affinity needed.',
+    ],
+    practices: [
+      'Readiness controls traffic; liveness restarts the container. Confusing the two is the most common self-inflicted Kubernetes outage.',
+      'Model servers are the exception to round-robin — see the Model Foundry.',
+      'A Service is not a security boundary. Segmentation is NetworkPolicy\'s job.',
+    ],
+  },
+
+  agentA: {
+    what: 'An agent pod. It is the MCP host, an A2A client, and an A2A server all at once.',
+    detail: [
+      'As MCP host it owns the model connection and runs one MCP client per connected server. That 1:1 pairing is an isolation boundary.',
+      'Ordinary Deployment, unusual habits: long-lived requests, heavy fan-out, and an appetite for credentials.',
+      'Conversation state belongs in a database, never pod memory — otherwise you cannot scale, roll, or survive an eviction.',
+      'Everything it receives — model output, tool results, A2A artifacts — is untrusted input.',
+    ],
+    practices: [
+      'One ServiceAccount per agent. Never "default", never shared, or your audit log cannot attribute anything.',
+      'automountServiceAccountToken: false unless it genuinely calls the Kubernetes API.',
+      'Cap iterations, delegation depth, wall-clock time and token spend — an uncapped loop is a runaway cost incident.',
+      'Timeout budgets must DECREASE down the call chain, never increase.',
+      'Human approval for consequential or irreversible actions.',
+    ],
+  },
+
+  agentB: {
+    what: 'A peer agent reached over A2A. Opaque to the caller — it has its own model and its own judgement.',
+    detail: [
+      'A2A is task-centric, not request/response: it creates a Task with a lifecycle, streams updates, and produces Artifacts.',
+      'It may take minutes, ask a clarifying question, or refuse outright. This is the key difference from MCP — an MCP server does what it is told, an A2A peer decides.',
+      'A2A reached v1.0 in 2026 under Linux Foundation governance; signed Agent Cards are the headline addition.',
+      'A2A specifics here are secondary-sourced — read the specification directly before implementing.',
+    ],
+    practices: [
+      'Verify the peer\'s SIGNED Agent Card. It proves which organisation issued the agent, which mTLS alone cannot tell you.',
+      'Cap delegation depth and detect cycles — two agents delegating to each other bill by the token forever.',
+      'Express your delegation graph in NetworkPolicy: if A never delegates to C, say so.',
+    ],
+  },
+
+  mcpGw: {
+    what: 'A policy checkpoint in front of the MCP servers. Applies per-tool rules without parsing bodies.',
+    detail: [
+      'Revision 2026-07-28 mirrors body fields into headers — Mcp-Method, Mcp-Name, and optional Mcp-Param-* — precisely so intermediaries can route and police cheaply.',
+      'It rate-limits on Mcp-Name, checks this agent may call this tool, writes an audit record, and forwards.',
+      'Because MCP is stateless, it can pick any replica. No sticky sessions, no consistent hashing, no shared session store.',
+    ],
+    practices: [
+      'The gateway is not sufficient on its own — the SERVER must re-validate that headers match the body, or policy here is only a suggestion.',
+      'Cap tool result size here; unbounded results exhaust the context window and cost money.',
+      'Verify MCP-Protocol-Version indicates a revision that mandates header/body validation.',
+    ],
+  },
+
+  mcpGithub: {
+    what: 'A first-party MCP server exposing a small, purposeful set of tools over Streamable HTTP.',
+    detail: [
+      'Streamable HTTP: one endpoint, POST only. Every JSON-RPC message is its own POST; a response is a single JSON object or an SSE stream scoped to that one request.',
+      'It validates that the inbound token\'s audience names itself, then obtains its OWN downstream credential.',
+      'Sampling, elicitation and roots now use MRTR: the server returns InputRequiredResult and the client retries the original request with inputResponses. One logical tool call can be several HTTP requests.',
+    ],
+    practices: [
+      'MUST validate token audience; MUST NOT accept tokens not issued for it.',
+      'NEVER pass the caller\'s token downstream — exchange it for the server\'s own credential.',
+      'Design least-privilege tools: expose get_issue, not run_sql.',
+      'Pin tool definitions by hash and re-prompt for approval when they change.',
+    ],
+  },
+
+  mcpDb: {
+    what: 'An MCP server fronting a database. The highest-value target in the bazaar.',
+    detail: [
+      'Holds pooled connections, so it is long-lived even though the protocol above it is stateless.',
+      'It is leg 1 of the lethal trifecta: private data access. Removing it is usually impossible — it is the product.',
+      'State handles it mints are ordinary tool arguments, not credentials.',
+    ],
+    practices: [
+      'Least-privilege TOOLS beat prompt hardening. Expose get_customer(id), not run_sql(query).',
+      'State handles must be random, expiring, and bound server-side to the authenticated principal — key state as <user_id>:<handle>. Possession is NOT authentication.',
+      'Mutating tools need idempotency keys; retries across four network hops are inevitable.',
+    ],
+  },
+
+  mcpExt: {
+    what: 'A third-party MCP server. Treat it as hostile regardless of how it behaves today.',
+    detail: [
+      'Content it returns is leg 2 of the lethal trifecta: exposure to untrusted content.',
+      'Tool descriptions and annotations from an untrusted server must themselves be treated as untrusted — they are read by a model that cannot reliably separate data from instructions.',
+      'A compromise here is the starting point of the lateral-movement scenario.',
+    ],
+    practices: [
+      'Egress allowlist, digest-pinned images, sandboxed. Assume breach.',
+      'Alert on tools/list_changed — a silently changed tool definition is an attack.',
+      'No amount of prompt hardening reliably stops injection from here. Limit the blast radius instead.',
+    ],
+  },
+
+  model: {
+    what: 'A large generative model served by vLLM on GPUs. Breaks most default Kubernetes assumptions.',
+    detail: [
+      'Minutes to start, tens of GB of memory, dollars per hour, and CPU utilisation that tells you nothing useful.',
+      'Continuous batching merges incoming requests with those already in flight; GPU memory holds the KV cache.',
+      'That cache is why round-robin is actively bad here: a replica already warm for this conversation is far cheaper than a cold one. Gateway API Inference Extension routes on inference-aware signals instead.',
+      'GPUs are extended resources — integers, not overcommittable. DRA (GA in v1.34) is the more expressive successor.',
+    ],
+    practices: [
+      'Use a STARTUP probe. A liveness probe firing mid-load gives an infinite crash loop that looks like a broken image.',
+      'Guaranteed QoS (requests == limits) — an eviction costs minutes of cold start.',
+      'Scale on queue depth or time-to-first-token, never CPU.',
+      'Cluster-internal only, never publicly exposed. NetworkPolicy: agent namespaces only.',
+      'PodDisruptionBudget so a drain cannot take every GPU replica at once.',
+    ],
+  },
+
+  model2: {
+    what: 'A small embedding model served by KServe. Cheap, fast, and scaled quite differently.',
+    detail: [
+      'Embedding workloads are short and uniform, so ordinary autoscaling works far better here than for generative serving.',
+      'Often CPU-servable, which frees GPU nodes for the models that actually need them.',
+      'Model weights are supply-chain artefacts like any other dependency.',
+    ],
+    practices: [
+      'Do not park small models on GPU nodes just because the nodes exist. Taint them.',
+      'Verify weight provenance and integrity before serving.',
+      'If you log prompts and completions for audit, that log is now highly sensitive data.',
+    ],
+  },
+
+  egress: {
+    what: 'The last gate before data leaves the cluster. The single highest-value control here.',
+    detail: [
+      'Leg 3 of the lethal trifecta — the ability to communicate externally — and the only leg you can realistically remove.',
+      'Default-deny egress NetworkPolicy plus a gateway with a destination allowlist.',
+      'Enforcement is the CNI\'s job, not Kubernetes\'. A CNI without policy support accepts your objects and enforces nothing.',
+      'In the injection scenario this is the only control that stops the attack — nothing upstream catches it.',
+    ],
+    practices: [
+      'Default-deny egress. If you implement one thing from this whole simulation, implement this.',
+      'Block 169.254.169.254 and all private ranges from workload egress.',
+      'Every outbound connection logged and attributable to a workload identity — an unattributable egress is an incident you cannot investigate.',
+      'Test that your CNI actually enforces policy. Do not assume it.',
+    ],
+  },
+
+  vault: {
+    what: 'Where credentials come from — an external secrets manager, not committed YAML.',
+    detail: [
+      'External Secrets Operator or the CSI Secret Store driver syncs from a real KMS or vault.',
+      'Kubernetes Secrets are base64-encoded, which is encoding, not encryption, unless you configure EncryptionConfiguration.',
+      'Projected ServiceAccount tokens are short-lived, audience-bound and auto-rotated — far better than the old never-expiring Secret tokens.',
+      'This is where an MCP server obtains its own downstream credential during token exchange.',
+    ],
+    practices: [
+      'Short-lived, audience-bound tokens over static credentials, always.',
+      'Encrypt etcd at rest via a KMS provider so the key is not on disk beside the data.',
+      'Rotate regularly and alert on use from an unexpected identity.',
+    ],
+  },
+
+  apiserver: {
+    what: 'The only door. Every read and write in the cluster goes through it — and it alone talks to etcd.',
+    detail: [
+      'Four stages in strict order: authentication → authorization → mutating admission → validating admission → persisted to etcd.',
+      'RBAC answers "can this identity write Pods?". Admission answers "is THIS pod acceptable?". You need both — they are different questions.',
+      'No other component reads or writes etcd directly. That chokepoint is what makes audit and policy possible at all.',
+      'It starts nothing. It only records that something should exist; controllers do the rest.',
+    ],
+    practices: [
+      'RBAC least privilege. No wildcards. Scrutinise escalate, bind and impersonate.',
+      'Never bind cluster-admin to a workload ServiceAccount.',
+      'Admission policy (Kyverno / ValidatingAdmissionPolicy): signed images, no :latest, limits required, no host namespaces.',
+      'Audit logging at RequestResponse for sensitive resources, shipped off-cluster.',
+    ],
+  },
+
+  etcd: {
+    what: 'The datastore holding all cluster state — including every Secret.',
+    detail: [
+      'Reached only by the API server. Nothing else should ever connect to it.',
+      'Secrets live here base64-encoded. That is encoding, not encryption, absent an EncryptionConfiguration.',
+      'Read access to etcd is equivalent to cluster-admin plus every credential in the cluster.',
+      'The API server supports alternative backends, but etcd is overwhelmingly the norm.',
+    ],
+    practices: [
+      'Encrypt at rest with a KMS provider so the key does not sit on disk beside the data.',
+      'mTLS between API server and etcd; never expose it on a routable network.',
+      'Back it up, and test restores. Encrypt the backups too — they contain the same Secrets.',
+    ],
+  },
+
+  scheduler: {
+    what: 'Decides which node a pod runs on. Then stops — it never contacts the node.',
+    detail: [
+      'Two phases: FILTER (which nodes CAN run this — GPU, taints, affinity, volumes) then SCORE (which is BEST — spread, image locality).',
+      'It writes a binding back to the API server. The kubelet notices and does the actual work.',
+      'It has no idea whether the pod ever starts. That is somebody else\'s reconciliation loop.',
+    ],
+    practices: [
+      'Taint GPU nodes and tolerate them only in workloads that need GPUs, so nothing squats on hardware costing dollars an hour.',
+      'Use topology spread constraints so replicas do not all land in one failure domain.',
+      'A pod stuck Pending is usually a filter failure — read the scheduler events before scaling anything.',
+    ],
+  },
+
+  ctrlmgr: {
+    what: 'A bundle of controllers, each running the same watch → diff → act loop.',
+    detail: [
+      'Deployment → ReplicaSet → Pod is three independent controllers, none aware of the others. That decoupling IS the architecture.',
+      'Every controller compares desired state against observed state and tries to close the gap. Forever.',
+      'Nothing is instant, and convergence may never happen. That is normal, not broken.',
+    ],
+    practices: [
+      'When something does not happen, ask which controller owns that transition, then read its events.',
+      'Write your own controllers the same way — level-triggered on observed state, not edge-triggered on events.',
+      'Never bind cluster-admin to a controller\'s ServiceAccount just to make an error go away.',
+    ],
+  },
+
+  kubelet: {
+    what: 'The node agent. The one "control plane" component that runs on worker nodes — which is why it sits off the hill.',
+    detail: [
+      'Watches for pods bound to ITS node, then tells containerd via CRI to pull images and run containers.',
+      'It knows nothing about the rest of the cluster — no view of other nodes, no scheduling opinion.',
+      'It reports pod and node status back to the API server, closing the reconciliation loop.',
+      'Native sidecars (init container with restartPolicy: Always, stable since v1.33) start BEFORE the app container and stop AFTER it — exactly what a sidecar MCP server needs.',
+    ],
+    practices: [
+      'Enable NodeRestriction so a compromised node cannot edit other nodes\' objects.',
+      'The kubelet API must not be anonymously reachable.',
+      'A node is a trust boundary: anything scheduled onto it can potentially reach its credentials.',
+    ],
+  },
+};
+
+/* ------------------------------------------------------------------ *
  * ZONES — districts of the park, each with its own teaching panel
  * ------------------------------------------------------------------ */
 export const ZONES = {

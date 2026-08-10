@@ -60,6 +60,26 @@
         <ol id="stepList" aria-label="Steps in this flow"></ol>
       </section>
 
+      <section id="nodeCard" hidden>
+        <div class="rowBetween">
+          <span class="eyebrow" id="nodeEyebrow">Building</span>
+          <button id="nodeClose" aria-label="Close building details" title="Close">&times;</button>
+        </div>
+        <h3 id="nodeName"></h3>
+        <p class="sub" id="nodeSub"></p>
+        <p id="nodeWhat"></p>
+
+        <details open>
+          <summary>How it works</summary>
+          <ul id="nodeDetail"></ul>
+        </details>
+
+        <details open>
+          <summary>Best practices</summary>
+          <ul id="nodePractices"></ul>
+        </details>
+      </section>
+
       <section id="zoneCard">
         <span class="eyebrow" id="zoneEyebrow">District</span>
         <h3 id="zoneName"></h3>

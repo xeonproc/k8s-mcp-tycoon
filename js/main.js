@@ -5,7 +5,7 @@
  * This file is the only one that touches the DOM or the browser event loop.
  */
 import * as THREE from '../vendor/three.module.min.js';
-import { NODES, ZONES, PACKETS, FLOWS } from './content.js';
+import { NODES, NODE_INFO, ZONES, PACKETS, FLOWS } from './content.js';
 import { buildWorld } from './world.js';
 import { Sim } from './sim.js';
 
@@ -184,7 +184,9 @@ function pick(e) {
 
   const node = NODES[id];
   selectNode(id);
-  showZone(node.zone);
+  showNode(id);            // per-building card
+  showZone(node.zone);     // its district, underneath
+  openPanel();             // on a phone the panel starts collapsed
   if (followChk.checked) followChk.checked = false;
   focusOn(node.x, node.z, Math.min(cam.goalRadius, 74));
 }
@@ -208,6 +210,7 @@ const btnPlay = $('btnPlay'), btnBack = $('btnBack'), btnFwd = $('btnFwd'), btnR
 const speed = $('speed'), speedOut = $('speedOut');
 const loopChk = $('loopChk'), followChk = $('followChk');
 const flowCard = $('flowCard'), flowKind = $('flowKind'), stepCount = $('stepCount');
+const nodeCard = $('nodeCard');
 const stepTitle = $('stepTitle'), stepBody = $('stepBody');
 const practice = $('practice'), practiceText = $('practiceText'), stepList = $('stepList');
 const hint = $('hint');
@@ -239,9 +242,9 @@ Object.entries(ZONES).forEach(([id, z]) => {
   b.innerHTML = `<span class="dot" style="color:${hex(z.color)}"></span>${z.name}`;
   b.title = z.subtitle;
   b.addEventListener('click', () => {
+    hideNode();            // a district view supersedes any single building
     showZone(id);
     followChk.checked = false;
-    pickRing.visible = false;
     focusOn(z.focus.x, z.focus.z, 78);
   });
   $('zoneChips').appendChild(b);
@@ -257,6 +260,8 @@ legendToggle.addEventListener('click', () => {
   legendToggle.setAttribute('aria-expanded', String(!open));
   legendBody.hidden = open;
 });
+
+$('nodeClose').addEventListener('click', hideNode);
 
 /* --- panel collapse --- */
 const panelToggle = $('panelToggle');
@@ -294,6 +299,36 @@ setTimeout(hideHint, 9000);
    5. Rendering the teaching panel
    ══════════════════════════════════════════════════════════════ */
 let currentZone = null;
+
+/* Per-building card. Unlike showZone this has no "same id" early return —
+   clicking a second building in the same district must still redraw. */
+function showNode(id) {
+  const n = NODES[id], info = NODE_INFO[id];
+  if (!info) { hideNode(); return; }
+
+  const z = ZONES[n.zone];
+  nodeCard.hidden = false;
+  $('nodeEyebrow').textContent = z ? z.name : 'Building';
+  if (z) $('nodeEyebrow').style.color = hex(z.color);
+  $('nodeName').textContent = n.label;
+  $('nodeSub').textContent = n.sub;
+  $('nodeWhat').textContent = info.what;
+  $('nodeDetail').innerHTML = info.detail.map((d) => `<li>${d}</li>`).join('');
+  $('nodePractices').innerHTML = info.practices.map((p) => `<li>${p}</li>`).join('');
+  $('panelScroll').scrollTop = 0;
+}
+
+function hideNode() {
+  nodeCard.hidden = true;
+  pickRing.visible = false;
+}
+
+function openPanel() {
+  if (!document.body.classList.contains('panel-collapsed')) return;
+  document.body.classList.remove('panel-collapsed');
+  panelToggle.setAttribute('aria-expanded', 'true');
+  setTimeout(resize, 300);
+}
 
 function showZone(id) {
   const z = ZONES[id];
