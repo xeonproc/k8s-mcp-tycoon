@@ -196,6 +196,24 @@ function buildBuilding(node) {
       g.add(box(3.4, 5.2, 0.5, MAT.roofRed, 0, 0.4, 0));
       break;
     }
+    case 'fence': {
+      // NetworkPolicy boundary. Solid posts and a cap rail give the translucent
+      // wall enough substance to be a clickable target, not just a haze.
+      g.add(box(0.6, 9, 30, MAT.fence));
+      for (let i = -2; i <= 2; i++) g.add(box(1.3, 9.4, 1.3, MAT.roofRed, 0, 0, i * 7));
+      g.add(box(1.8, 0.5, 30, MAT.roofRed, 0, 9.4, 0));
+      break;
+    }
+    case 'gatehouse': {
+      // Admission control — a gate you pass THROUGH, in front of the keep.
+      g.add(box(2.2, 5.5, 2.2, MAT.stone, -3.4, 0, 0));
+      g.add(box(2.2, 5.5, 2.2, MAT.stone, 3.4, 0, 0));
+      g.add(box(9.4, 1.3, 3, roof, 0, 5.5, 0));
+      g.add(pyramid(1.8, 2.2, roof, -3.4, 6.8, 0));
+      g.add(pyramid(1.8, 2.2, roof, 3.4, 6.8, 0));
+      g.add(box(4.6, 0.45, 0.45, MAT.roofRed, 0, 2.8, 0));   // the barrier itself
+      break;
+    }
     case 'vault': {
       g.add(box(7, 5, 7, MAT.stone));
       g.add(box(7.8, 0.8, 7.8, roof, 0, 5, 0));
@@ -327,12 +345,9 @@ export function buildWorld(scene) {
     nodeObjects[id] = { group: g, label, node, anchorY: node.y + 3 };
   });
 
-  // NetworkPolicy boundary — a translucent wall at the egress line.
-  // Visualising the control makes the "attack blocked here" beat land.
-  const fenceGeo = new THREE.BoxGeometry(0.5, 9, 30);
-  const fence = new THREE.Mesh(fenceGeo, MAT.fence);
-  fence.position.set(54, 4.5, -4);
-  root.add(fence);
+  // The NetworkPolicy boundary used to be drawn here as loose scenery. It is now
+  // the `netpol` node instead, so the most-cited control in the curriculum is
+  // clickable rather than decorative.
 
   // Trees, kept off the paths
   const treeSpots = [];

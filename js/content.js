@@ -40,10 +40,15 @@ export const NODES = {
   model:     { x:  46, z: -12, y: 0, zone: 'foundry', kind: 'foundry', label: 'llama-3-70b',         sub: 'vLLM · GPU' },
   model2:    { x:  46, z:   1, y: 0, zone: 'foundry', kind: 'foundry', label: 'embed-model',         sub: 'KServe' },
 
+  // The boundary itself, standing between the workloads and the way out.
+  netpol:    { x:  54, z:  -4, y: 0, zone: 'vault',   kind: 'fence',   label: 'NetworkPolicy',       sub: 'Default-deny' },
+
   egress:    { x:  60, z: -14, y: 0, zone: 'vault',   kind: 'egressgw',label: 'Egress Gateway',      sub: 'Allowlist' },
   vault:     { x:  60, z:   6, y: 0, zone: 'vault',   kind: 'vault',   label: 'Secrets Vault',       sub: 'ESO / KMS' },
 
   apiserver: { x:  -8, z: -34, y: 6, zone: 'control', kind: 'keep',    label: 'kube-apiserver',      sub: 'The only door' },
+  // Sits in FRONT of the keep: nothing becomes real without passing through it.
+  admission: { x:  -8, z: -22, y: 6, zone: 'control', kind: 'gatehouse',label: 'Admission',          sub: 'Last gate' },
   etcd:      { x:   6, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'etcd',                sub: 'All state' },
   scheduler: { x: -22, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'kube-scheduler',      sub: 'Placement' },
   ctrlmgr:   { x: -34, z: -32, y: 6, zone: 'control', kind: 'tower',   label: 'controller-manager',  sub: 'Reconcile' },
@@ -144,11 +149,14 @@ export const NODE_INFO = {
       'Revision 2026-07-28 mirrors body fields into headers — Mcp-Method, Mcp-Name, and optional Mcp-Param-* — precisely so intermediaries can route and police cheaply.',
       'It rate-limits on Mcp-Name, checks this agent may call this tool, writes an audit record, and forwards.',
       'Because MCP is stateless, it can pick any replica. No sticky sessions, no consistent hashing, no shared session store.',
+      'This is the only place with a complete view of every tool call in the cluster — which agent, which tool, which arguments, allowed or denied. That record is the tool-layer equivalent of the API server audit log.',
     ],
     practices: [
       'The gateway is not sufficient on its own — the SERVER must re-validate that headers match the body, or policy here is only a suggestion.',
       'Cap tool result size here; unbounded results exhaust the context window and cost money.',
       'Verify MCP-Protocol-Version indicates a revision that mandates header/body validation.',
+      'Log every call with the END-USER identity, not just the calling agent. Token exchange downstream is what keeps that attribution truthful.',
+      'Correlate a single user request across all four hops with one trace id. Without it, MRTR retries and agent fan-out make an incident impossible to reconstruct.',
     ],
   },
 
@@ -226,6 +234,42 @@ export const NODE_INFO = {
     ],
   },
 
+  netpol: {
+    what: 'The segmentation boundary. Not a proxy — a rule the CNI enforces on every packet.',
+    detail: [
+      'The Kubernetes network model mandates that every pod gets an IP and pods reach each other without NAT. The consequence is that by DEFAULT everything can talk to everything. Segmentation is opt-in.',
+      'NetworkPolicy is enforced by the CNI, not by Kubernetes. A CNI without policy support will happily accept your objects and enforce nothing at all.',
+      'Policies are additive and default-allow until at least one policy selects a pod — then that pod becomes default-deny for the direction the policy covers.',
+      'Ingress rules are the half everyone writes. Egress is the half that stops exfiltration, and the half most often missing.',
+      'A namespace is a naming scope, not a security boundary. NetworkPolicy is what makes it behave like one.',
+    ],
+    practices: [
+      'Default-deny ingress AND egress in every namespace, then allow explicitly.',
+      'Block 169.254.169.254 and all private ranges from workload egress — the cloud metadata endpoint hands out node credentials to anything that asks.',
+      'Express your architecture in policy: if the research agent never talks to the database, the policy should say so.',
+      'Verify your CNI actually enforces policy. Write a policy, then try to violate it. Do not assume.',
+      'Policy is the control that stops the injection attack in this simulation. Nothing upstream of it does.',
+    ],
+  },
+
+  admission: {
+    what: 'The last gate before an object becomes real. Answers "is THIS object acceptable?"',
+    detail: [
+      'Runs after authentication and authorization, in two phases: MUTATING admission can rewrite the object (inject sidecars, add defaults), then VALIDATING admission can only accept or reject.',
+      'RBAC answers "may this identity create Pods?". Admission answers "is this SPECIFIC pod allowed?". They are different questions and you need both — RBAC cannot express "no privileged containers".',
+      'Pod Security Admission has been stable since v1.25 and replaced the removed PodSecurityPolicy. Its "restricted" profile blocks privileged containers, host namespaces and privilege escalation.',
+      'Policy engines (Kyverno, ValidatingAdmissionPolicy) express everything else: signed images, no :latest, required resource limits.',
+      'This is the control that rejects the container escape in the lateral-movement scenario.',
+    ],
+    practices: [
+      'Enforce Pod Security Admission "restricted" by default; make exceptions explicit and namespace-scoped.',
+      'Verify image signatures and pin by digest at admission — it is the only place you can refuse an unknown image before it runs.',
+      'Require resource limits here rather than hoping teams remember.',
+      'Fail closed. An admission webhook that fails open is not a control, and an outage becomes a security incident.',
+      'Keep webhook latency low; every API write in the cluster waits on it.',
+    ],
+  },
+
   egress: {
     what: 'The last gate before data leaves the cluster. The single highest-value control here.',
     detail: [
@@ -264,12 +308,16 @@ export const NODE_INFO = {
       'RBAC answers "can this identity write Pods?". Admission answers "is THIS pod acceptable?". You need both — they are different questions.',
       'No other component reads or writes etcd directly. That chokepoint is what makes audit and policy possible at all.',
       'It starts nothing. It only records that something should exist; controllers do the rest.',
+      'Its audit log is the cluster\'s only complete record of who did what. Each entry carries the authenticated user, the verb, the resource and the decision — which is exactly what you cannot reconstruct if a workload shares a ServiceAccount or an MCP server forwards somebody else\'s token.',
     ],
     practices: [
       'RBAC least privilege. No wildcards. Scrutinise escalate, bind and impersonate.',
       'Never bind cluster-admin to a workload ServiceAccount.',
       'Admission policy (Kyverno / ValidatingAdmissionPolicy): signed images, no :latest, limits required, no host namespaces.',
-      'Audit logging at RequestResponse for sensitive resources, shipped off-cluster.',
+      'Audit at RequestResponse level for Secrets, RBAC objects and admission decisions; Metadata level elsewhere to control volume.',
+      'Ship audit logs OFF-CLUSTER. An attacker with cluster-admin can edit anything that stays inside.',
+      'Alert on the shapes that matter: cluster-admin bindings, exec into pods, Secret reads by an identity that has never read one before.',
+      'Audit is only as good as identity. One ServiceAccount per workload is an audit requirement, not just a security one.',
     ],
   },
 
@@ -653,10 +701,16 @@ export const FLOWS = [
         practice: 'Everything is watch → diff → act. Nothing is instant, and convergence may never happen — that is normal, not broken.',
       },
       {
-        from: 'apiserver', to: 'etcd', packet: 'control', zone: 'control',
-        title: 'The API server persists it',
-        body: 'The request passed authentication, authorization, mutating admission and validating admission. Only now is it written. The API server is the ONLY component that talks to etcd.',
-        practice: 'Admission is the last gate before an object becomes real. Enforce signed images and required limits here.',
+        from: 'apiserver', to: 'admission', packet: 'control', zone: 'control',
+        title: 'Admission inspects the object',
+        body: 'Authentication and authorization already passed — this identity MAY create pods. Admission asks the different question: is THIS pod acceptable? Mutating webhooks rewrite it first (sidecars, defaults), then validating webhooks accept or reject.',
+        practice: 'RBAC cannot express "no privileged containers". Admission can. You need both.',
+      },
+      {
+        from: 'admission', to: 'etcd', packet: 'control', zone: 'control',
+        title: 'Only now is it persisted',
+        body: 'Having survived all four stages, the object is written to etcd. The API server is the ONLY component that talks to etcd — which is exactly why every policy and every audit record can live at this one chokepoint.',
+        practice: 'Fail closed. An admission webhook that fails open is not a control.',
       },
       {
         from: 'apiserver', to: 'scheduler', packet: 'control', zone: 'control',
@@ -779,6 +833,39 @@ export const FLOWS = [
   },
 
   {
+    id: 'ssrf',
+    name: '⚠ Attack: SSRF → cloud metadata',
+    kind: 'attack',
+    blurb: 'A fetch tool pointed at 169.254.169.254. The oldest cloud trick, now reachable by prompt.',
+    steps: [
+      {
+        from: 'agentA', to: 'mcpExt', packet: 'mcp', zone: 'mcp',
+        title: 'A tool that fetches a URL',
+        body: 'fetch_url(url) looks harmless and is genuinely useful. But the URL is an argument — and the argument is chosen by a model reading untrusted content.',
+        practice: 'Any tool taking a URL, hostname or file path is an SSRF primitive. Treat it as one from the day you design it.',
+      },
+      {
+        from: 'mcpExt', to: 'netpol', packet: 'attack', zone: 'vault',
+        title: 'The URL is the metadata endpoint',
+        body: 'The model was persuaded to call fetch_url("http://169.254.169.254/latest/meta-data/iam/security-credentials/"). The server has no idea this address is special — from inside the pod it is just another HTTP request.',
+        practice: 'Validate URL arguments against an allowlist server-side. Blocklists of "internal" addresses always miss a redirect, a DNS name, or an IPv6 form.',
+      },
+      {
+        from: 'netpol', to: 'netpol', packet: 'blocked', zone: 'vault', blocked: true,
+        title: 'DENIED — link-local is not egressable',
+        body: 'The egress policy denies 169.254.0.0/16 along with every private range. The request never leaves the pod. Had it succeeded, the reply would have been the NODE\'s IAM credentials — cloud permissions belonging to the whole machine, not to this workload.',
+        practice: 'Block 169.254.169.254 and all private ranges in workload egress policy. On AWS require IMDSv2 and set the hop limit to 1 so a container cannot reach it at all.',
+      },
+      {
+        from: 'netpol', to: 'apiserver', packet: 'control', zone: 'control',
+        title: 'Why this one matters so much',
+        body: 'Node credentials are usually far broader than pod credentials — often enough to read every Secret in the cluster or pull from every registry. SSRF turns a read-only fetch tool into cloud-account escalation, skipping Kubernetes RBAC entirely.',
+        practice: 'Use workload identity (IRSA, Workload Identity) so pods get their own scoped cloud credentials and the node role stays minimal.',
+      },
+    ],
+  },
+
+  {
     id: 'lateral',
     name: '⚠ Attack: pod compromise → lateral movement',
     kind: 'attack',
@@ -803,7 +890,7 @@ export const FLOWS = [
         practice: 'CONTROL 2: minimal RBAC. This ServiceAccount should not be able to create pods at all.',
       },
       {
-        from: 'apiserver', to: 'apiserver', packet: 'blocked', zone: 'control', blocked: true,
+        from: 'apiserver', to: 'admission', packet: 'blocked', zone: 'control', blocked: true,
         title: 'DENIED — admission rejects it',
         body: 'Pod Security Admission "restricted" refuses privileged containers, host namespaces and privilege escalation. Meanwhile default-deny egress meant the pod could not reach the API server in the first place.',
         practice: 'CONTROL 3: PSA restricted. CONTROL 4: default-deny egress. Any ONE of the four stops this — that redundancy is what defence in depth actually means.',
