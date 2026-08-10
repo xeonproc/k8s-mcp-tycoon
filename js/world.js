@@ -339,7 +339,7 @@ export function buildWorld(scene) {
     const bbox = new THREE.Box3().setFromObject(g);
     const top = Math.max(bbox.max.y, node.y + 4);
     const label = makeLabel(node.label, node.sub);
-    label.position.set(node.x, top + 3.2, node.z);
+    label.position.set(node.x, top + 3.2 + (node.labelLift || 0), node.z);
     root.add(label);
 
     // Packets fly at anchorY. Derived from the building's true bounding box so a

@@ -191,10 +191,75 @@ function pick(e) {
   focusOn(node.x, node.z, Math.min(cam.goalRadius, 74));
 }
 
+let selectedId = null;
+
 function selectNode(id) {
   const n = NODES[id];
+  selectedId = id;
   pickRing.position.set(n.x, surfaceY(n) + 0.3, n.z);
   pickRing.visible = true;
+}
+
+/* ── label decluttering ───────────────────────────────────────────
+   Labels are screen-facing sprites drawn on top of everything, so from some
+   camera angles they pile onto each other and the park becomes unreadable.
+   Each frame: project every label to screen space and hide any whose box
+   overlaps one already claimed by a higher-priority label.
+
+   Priority order — the selected building, then the endpoints of the step
+   currently animating, then nearest to camera. So the labels you are actually
+   reading are never the ones culled. */
+const _c = new THREE.Vector3();
+const _o = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const placed = [];
+const entries = [];
+
+function updateLabels() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  _right.setFromMatrixColumn(camera.matrixWorld, 0);   // camera-right, world space
+
+  const step = sim.step;
+  entries.length = 0;
+
+  for (const id in nodeObjects) {
+    const label = nodeObjects[id].label;
+
+    _c.copy(label.position).project(camera);
+    if (_c.z > 1) { label.visible = false; continue; }   // behind the camera
+
+    // Pixels per world unit at this depth, so sprite size maps to a screen box.
+    _o.copy(label.position).addScaledVector(_right, 1).project(camera);
+    const pxPerUnit = Math.abs(_o.x - _c.x) * 0.5 * w;
+
+    let prio = 2;
+    if (id === selectedId) prio = 0;
+    else if (step && (step.from === id || step.to === id)) prio = 1;
+
+    entries.push({
+      label, prio,
+      dist: camera.position.distanceToSquared(label.position),
+      sx: (_c.x * 0.5 + 0.5) * w,
+      sy: (-_c.y * 0.5 + 0.5) * h,
+      hw: (label.scale.x / 2) * pxPerUnit,
+      hh: (label.scale.y / 2) * pxPerUnit,
+    });
+  }
+
+  entries.sort((a, b) => a.prio - b.prio || a.dist - b.dist);
+
+  placed.length = 0;
+  for (const e of entries) {
+    const l = e.sx - e.hw, r = e.sx + e.hw, t = e.sy - e.hh, b = e.sy + e.hh;
+    let clash = false;
+    for (let i = 0; i < placed.length; i++) {
+      const q = placed[i];
+      if (l < q.r && r > q.l && t < q.b && b > q.t) { clash = true; break; }
+    }
+    e.label.visible = !clash;
+    if (!clash) placed.push({ l, r, t, b });
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -321,6 +386,7 @@ function showNode(id) {
 function hideNode() {
   nodeCard.hidden = true;
   pickRing.visible = false;
+  selectedId = null;
 }
 
 function openPanel() {
@@ -457,6 +523,7 @@ function frame() {
     cam.goalTarget.z += (sim.packet.position.z - cam.goalTarget.z) * 0.035;
   }
   applyCamera();
+  updateLabels();
 
   if (pickRing.visible) {
     const p = performance.now() * 0.003;

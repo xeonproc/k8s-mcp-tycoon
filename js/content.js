@@ -41,7 +41,7 @@ export const NODES = {
   model2:    { x:  46, z:   1, y: 0, zone: 'foundry', kind: 'foundry', label: 'embed-model',         sub: 'KServe' },
 
   // The boundary itself, standing between the workloads and the way out.
-  netpol:    { x:  54, z:  -4, y: 0, zone: 'vault',   kind: 'fence',   label: 'NetworkPolicy',       sub: 'Default-deny' },
+  netpol:    { x:  54, z:  -4, y: 0, zone: 'vault',   kind: 'fence',   label: 'NetworkPolicy',       sub: 'Default-deny', labelLift: 3.5 },
 
   egress:    { x:  60, z: -14, y: 0, zone: 'vault',   kind: 'egressgw',label: 'Egress Gateway',      sub: 'Allowlist' },
   vault:     { x:  60, z:   6, y: 0, zone: 'vault',   kind: 'vault',   label: 'Secrets Vault',       sub: 'ESO / KMS' },
@@ -49,13 +49,13 @@ export const NODES = {
   apiserver: { x:  -8, z: -34, y: 6, zone: 'control', kind: 'keep',    label: 'kube-apiserver',      sub: 'The only door' },
   // Sits in FRONT of the keep: nothing becomes real without passing through it.
   admission: { x:  -8, z: -26, y: 6, zone: 'control', kind: 'gatehouse',label: 'Admission',          sub: 'Last gate' },
-  etcd:      { x:   6, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'etcd',                sub: 'All state' },
+  etcd:      { x:  10, z: -40, y: 6, zone: 'control', kind: 'tower',   label: 'etcd',                sub: 'All state' },
   scheduler: { x: -22, z: -38, y: 6, zone: 'control', kind: 'tower',   label: 'kube-scheduler',      sub: 'Placement' },
   ctrlmgr:   { x: -34, z: -32, y: 6, zone: 'control', kind: 'tower',   label: 'controller-manager',  sub: 'Reconcile' },
   // Deliberately OFF the plateau, at the foot of the ramp: the kubelet is the one
   // "control plane" component that runs on worker nodes, not on the control plane.
   // (It also has to sit here — the hill is solid, so y:0 inside its footprint buries it.)
-  kubelet:   { x:   8, z: -11, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
+  kubelet:   { x:  12, z: -14, y: 0, zone: 'control', kind: 'depot',   label: 'kubelet',             sub: 'Node agent' },
 };
 
 /* The control-plane plateau is a 6-unit hill wearing a 0.6-unit plaza cap, so a
